@@ -1,80 +1,115 @@
 // src/lib/db.ts
+import fs from 'node:fs';
+import path from 'node:path';
+import type { ChainKey } from './chains';
+import { buildUri } from './uri';
 
-export type ChainKey =
-  | 'btc'
-  | 'bsv'
-  | 'bch'
-  | 'eth'
-  | 'base'
-  | 'polygon'
-  | 'arbitrum'
-  | 'sol';
 
-export type ApiPayload = {
-  profile: {
-    slug: string;
-    displayName: string;
-    defaultChain: ChainKey;
-    note?: string;
-  };
-  uris: {
-    chain: ChainKey;
-    address: string;
-    /** Optional token/symbol (e.g., usdc, usdt, ordi, dog). */
-    asset?: string;
-    /** Prebuilt wallet URI to open. */
-    uri: string;
-  }[];
+export type Profile = {
+  slug: string;
+  displayName: string;
+  defaultChain: ChainKey;
+  note?: string;
 };
 
-const DATA: Record<string, ApiPayload> = {
-  mike: {
-    profile: {
+export type AddressInput = {
+  chain: ChainKey;
+  address: string;
+  asset?: string;
+};
+
+export type AddressRow = AddressInput & {
+  uri: string;
+};
+
+export type ProfilesFile = {
+  profiles: Record<
+    string,
+    {
+      displayName: string;
+      defaultChain: ChainKey;
+      note?: string;
+      addresses: AddressInput[];
+    }
+  >;
+};
+
+const DATA_PATH = path.join(process.cwd(), 'data', 'profiles.json');
+
+function loadFile(): ProfilesFile | null {
+  try {
+    const txt = fs.readFileSync(DATA_PATH, 'utf8');
+    return JSON.parse(txt) as ProfilesFile;
+  } catch {
+    return null;
+  }
+}
+
+/** ------- PUBLIC API used by routes/pages ------- **/
+
+export function getProfile(slug: string): Profile | null {
+  const file = loadFile();
+  if (file?.profiles?.[slug]) {
+    const p = file.profiles[slug];
+    return {
+      slug,
+      displayName: p.displayName,
+      defaultChain: p.defaultChain,
+      note: p.note,
+    };
+  }
+
+  // Fallback (hard-coded example) — adjust or remove
+  if (slug === 'mike') {
+    return {
       slug: 'mike',
       displayName: 'Cnidaria',
       defaultChain: 'btc',
       note: 'Thanks for supporting the jelly gang.',
-    },
-    uris: [
-      // --- Bitcoin (native + BRC-20s)
-      { chain: 'btc', address: 'bc1qEXAMPLEmikebtc', uri: 'bitcoin:bc1qEXAMPLEmikebtc' },
-      { chain: 'btc', address: 'bc1qEXAMPLEmikebtc', asset: 'ordi', uri: 'bitcoin:bc1qEXAMPLEmikebtc?asset=ordi' },
-      { chain: 'btc', address: 'bc1qEXAMPLEmikebtc', asset: 'dog',  uri: 'bitcoin:bc1qEXAMPLEmikebtc?asset=dog' },
+    };
+  }
 
-      // --- Bitcoin SV
-      { chain: 'bsv', address: '1EXAMPLEmikebsv', uri: 'bitcoinsv:1EXAMPLEmikebsv' },
+  return null;
+}
 
-      // --- Bitcoin Cash
-      { chain: 'bch', address: 'bitcoincash:qEXAMPLEmikebch', uri: 'bitcoincash:qEXAMPLEmikebch' },
+export function getAddresses(slug: string): AddressRow[] {
+  const file = loadFile();
+  if (file?.profiles?.[slug]) {
+    const addrs = file.profiles[slug].addresses;
+    return addrs.map((a) => ({
+      ...a,
+      uri: buildUri(a.chain, a.address, a.asset),
+    }));
+  }
 
-      // --- Ethereum (native + ERC-20s)
-      { chain: 'eth', address: '0xAbCDEFEXAMPLEmike', uri: 'ethereum:0xAbCDEFEXAMPLEmike' },
-      { chain: 'eth', address: '0xAbCDEFEXAMPLEmike', asset: 'usdc', uri: 'ethereum:0xAbCDEFEXAMPLEmike?asset=usdc' },
-      { chain: 'eth', address: '0xAbCDEFEXAMPLEmike', asset: 'usdt', uri: 'ethereum:0xAbCDEFEXAMPLEmike?asset=usdt' },
+  // Fallback (hard-coded example) — adjust or remove
+  if (slug === 'mike') {
+    const fallback: AddressInput[] = [
+      { chain: 'btc', address: 'bc1qEXAMPLEmikebtc' },
+      { chain: 'bsv', address: '1EXAMPLEmikebsv' },
+      { chain: 'bch', address: 'bitcoincash:qEXAMPLEmikebch' },
 
-      // --- Base (ETH + USDC + USDT)
-      { chain: 'base', address: '0xAbCDEFEXAMPLEmike', uri: 'ethereum:0xAbCDEFEXAMPLEmike' },
-      { chain: 'base', address: '0xAbCDEFEXAMPLEmike', asset: 'usdc', uri: 'ethereum:0xAbCDEFEXAMPLEmike?asset=usdc' },
-      { chain: 'base', address: '0xAbCDEFEXAMPLEmike', asset: 'usdt', uri: 'ethereum:0xAbCDEFEXAMPLEmike?asset=usdt' },
+      { chain: 'eth', address: '0xAbCDEF...ETH' },
+      { chain: 'base', address: '0xAbCDEF...ETH' },
+      { chain: 'polygon', address: '0xAbCDEF...ETH' },
+      { chain: 'arbitrum', address: '0xAbCDEF...ETH' },
 
-      // --- Polygon (ETH + USDC + USDT)
-      { chain: 'polygon', address: '0xAbCDEFEXAMPLEmike', uri: 'ethereum:0xAbCDEFEXAMPLEmike' },
-      { chain: 'polygon', address: '0xAbCDEFEXAMPLEmike', asset: 'usdc', uri: 'ethereum:0xAbCDEFEXAMPLEmike?asset=usdc' },
-      { chain: 'polygon', address: '0xAbCDEFEXAMPLEmike', asset: 'usdt', uri: 'ethereum:0xAbCDEFEXAMPLEmike?asset=usdt' },
+      { chain: 'eth', asset: 'USDC', address: '0xAbCDEF...ETH' },
+      { chain: 'eth', asset: 'USDT', address: '0xAbCDEF...ETH' },
 
-      // --- Arbitrum (ETH + USDC + USDT)
-      { chain: 'arbitrum', address: '0xAbCDEFEXAMPLEmike', uri: 'ethereum:0xAbCDEFEXAMPLEmike' },
-      { chain: 'arbitrum', address: '0xAbCDEFEXAMPLEmike', asset: 'usdc', uri: 'ethereum:0xAbCDEFEXAMPLEmike?asset=usdc' },
-      { chain: 'arbitrum', address: '0xAbCDEFEXAMPLEmike', asset: 'usdt', uri: 'ethereum:0xAbCDEFEXAMPLEmike?asset=usdt' },
+      { chain: 'sol', address: '9xyEXAMPLEmikesol' },
+      { chain: 'sol', asset: 'USDC', address: '9xyEXAMPLEmikesol' },
+      { chain: 'sol', asset: 'USDT', address: '9xyEXAMPLEmikesol' },
 
-      // --- Solana (native + SPLs)
-      { chain: 'sol', address: '9xyEXAMPLEmikesol', uri: 'solana:9xyEXAMPLEmikesol' },
-      { chain: 'sol', address: '9xyEXAMPLEmikesol', asset: 'usdc', uri: 'solana:9xyEXAMPLEmikesol?spl-token=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' },
-      { chain: 'sol', address: '9xyEXAMPLEmikesol', asset: 'usdt', uri: 'solana:9xyEXAMPLEmikesol?spl-token=Es9vMFrzaCERmJfrF4H2FYD4Kqv3dDwLYbEsmX3bRc2' },
-    ],
-  },
-};
+      { chain: 'btc', asset: 'ORDI', address: 'bc1qEXAMPLEmikebtc' },
+      { chain: 'btc', asset: 'DOG',  address: 'bc1qEXAMPLEmikebtc' },
+    ];
 
-export async function getProfile(slug: string): Promise<ApiPayload | null> {
-  return DATA[slug] ?? null;
+    return fallback.map((a) => ({
+      ...a,
+      uri: buildUri(a.chain, a.address, a.asset),
+    }));
+  }
+
+  return [];
 }

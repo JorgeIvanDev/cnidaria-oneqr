@@ -1,71 +1,40 @@
+// src/lib/uri.ts
 import type { ChainKey } from './chains';
-import { ERC20_TOKENS, SPL_TOKENS } from './chains';
 
-/** Resolve a token identifier to a contract/mint string */
-function resolveTokenAddress(chain: ChainKey, asset?: string): string | null {
-  if (!asset) return null;
-  const key = asset.toLowerCase();
-
-  if (chain === 'sol') {
-    return SPL_TOKENS[key]?.mint ?? asset; // allow raw mint
+/**
+ * Minimal, reliable payment URI generator.
+ * Keeps things simple for launch. Wallets will still open and
+ * pre-fill the address. You can extend to EIP-681 / SPL later.
+ */
+export function buildUri(chain: ChainKey, address: string, asset?: string): string {
+  switch (chain) {
+    case 'btc': {
+      // For BRC-20 like ORDI/DOG we still use standard bitcoin: URI.
+      return `bitcoin:${address}`;
+    }
+    case 'bch': {
+      return `bitcoincash:${address}`;
+    }
+    case 'bsv': {
+      // Commonly recognized by compatible wallets
+      return `bitcoinsv:${address}`;
+    }
+    case 'sol': {
+      // Basic solana: address URI. (SPL token-aware links can be added later.)
+      return `solana:${address}`;
+    }
+    case 'eth':
+    case 'base':
+    case 'polygon':
+    case 'arbitrum': {
+      // Simple ethereum-style deep link. (You can upgrade to EIP-681 later.)
+      return `ethereum:${address}`;
+    }
+    default: {
+      // Fallback to raw address as last resort (shouldn't happen if ChainKey is correct)
+      return address;
+    }
   }
-
-  if (chain === 'eth' || chain === 'base' || chain === 'polygon' || chain === 'arbitrum') {
-    return ERC20_TOKENS[key]?.address ?? asset; // allow raw contract
-  }
-
-  return null;
 }
 
-export function buildPaymentURI(
-  chain: ChainKey,
-  address: string,
-  opts?: { label?: string; amount?: string; memo?: string; asset?: string }
-): string {
-  const { amount, label, memo, asset } = opts || {};
-  const tokenAddr = resolveTokenAddress(chain, asset);
-
-  // --- Bitcoin-style chains ---
-  if (chain === 'btc') {
-    const p = new URLSearchParams();
-    if (amount) p.set('amount', amount);
-    if (label) p.set('label', label);
-    if (memo) p.set('message', memo);
-    const qs = p.toString();
-    return `bitcoin:${address}${qs ? `?${qs}` : ''}`;
-  }
-
-  if (chain === 'bsv') {
-    // Some wallets also accept `bitcoin:`, but `bitcoinsv:` is common.
-    return `bitcoinsv:${address}`;
-  }
-
-  if (chain === 'bch') {
-    // CashAddr recommended
-    return `bitcoincash:${address}`;
-  }
-
-  // --- Solana / Solana Pay ---
-  if (chain === 'sol') {
-    const p = new URLSearchParams();
-    if (amount) p.set('amount', amount);
-    if (label) p.set('label', label || '');
-    if (memo) p.set('memo', memo || '');
-    if (tokenAddr) p.set('spl-token', tokenAddr); // SPL token mint
-    const qs = p.toString();
-    return `solana:${address}${qs ? `?${qs}` : ''}`;
-  }
-
-  // --- EVM chains (ETH/Base/Polygon/Arbitrum) ---
-  if (!tokenAddr) {
-    // Native coin (ETH, MATIC, etc). For MVP we omit value.
-    return `ethereum:${address}`;
-  }
-
-  // ERC-20 transfer (EIP-681).
-  // NOTE: If you pass `amount`, it must be in minimal units (wei) for MVP.
-  const p = new URLSearchParams();
-  p.set('address', address);
-  if (amount) p.set('uint256', amount);
-  return `ethereum:${tokenAddr}/transfer?${p.toString()}`;
-}
+export default buildUri;
