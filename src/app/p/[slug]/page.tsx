@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { use, useEffect, useMemo, useState } from 'react';
 import QRCode from 'qrcode';
 
 type ChainKey = 'btc' | 'eth' | 'base' | 'polygon' | 'arbitrum' | 'sol';
@@ -19,23 +19,26 @@ const CHAIN_LABEL: Record<ChainKey, string> = {
   sol: 'Solana',
 };
 
-export default function ProfilePage({ params }: { params: { slug: string } }) {
+// Next 15: params is a Promise in client components → unwrap with React.use()
+export default function ProfilePage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = use(params); // <-- use the unwrapped slug
+
   const [data, setData] = useState<ProfileRes | null>(null);
   const [qr, setQr] = useState<string>('');
   const [selected, setSelected] = useState<ChainKey | null>(null);
 
   useEffect(() => {
-    fetch(`/api/profile/${params.slug}`)
+    fetch(`/api/profile/${slug}`)
       .then(r => r.json())
       .then((j: ProfileRes) => {
         setData(j);
-        QRCode.toDataURL(`${location.origin}/p/${params.slug}`, { margin: 1, scale: 4 })
+        QRCode.toDataURL(`${location.origin}/p/${slug}`, { margin: 1, scale: 4 })
           .then(setQr);
         const hint = (new URLSearchParams(location.search)).get('chain') as ChainKey | null;
         setSelected(hint || j.profile.defaultChain);
       })
       .catch(console.error);
-  }, [params.slug]);
+  }, [slug]); // <-- depend on slug, not params.slug
 
   const current = useMemo(() => {
     if (!data || !selected) return null;
@@ -78,7 +81,7 @@ export default function ProfilePage({ params }: { params: { slug: string } }) {
       <div className="flex items-center gap-4">
         {qr && <img src={qr} alt="QR code" className="w-32 h-32 border rounded-lg" />}
         <div className="text-sm opacity-70">
-          Share this QR anywhere. It points to <span className="font-mono">{`/p/${params.slug}`}</span>.
+          Share this QR anywhere. It points to <span className="font-mono">{`/p/${slug}`}</span>.
         </div>
       </div>
     </div>
